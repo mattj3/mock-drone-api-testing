@@ -8,12 +8,12 @@ A small FastAPI service that simulates drone telemetry, and the API test suite t
 
 **What this demonstrates**
 
-- **97 async pytest tests** at 100% branch coverage, with a 90% gate in CI and warnings treated as errors
+- **107 pytest tests** at 100% branch coverage, with a 90% gate in CI and warnings treated as errors
 - **Boundary-value analysis** on every field, which caught a real bug: `"alt": "Infinity"` was accepted
-- **Contract tests** that validate every live response against the service's own OpenAPI schema
-- **Property-based tests** (Hypothesis) proving the payload builders agree with the API model
+- **Contract tests** that validate live 2xx and 422 responses against the service's own OpenAPI schema
+- **Property-based tests** (Hypothesis) over every field's numeric range, plus the payload builders
 - **Auth and rate-limit scenarios** (401, 429 with `Retry-After`, sliding window) behind env toggles
-- **LLM-assisted test design**: a script asks Claude for edge cases; the reviewed output is committed and replayed offline, so CI never depends on a model
+- **LLM-assisted test design**: a script asks Claude for edge cases; the output is committed with its review status and replayed offline, so CI never depends on a model
 - **CI** on Python 3.11–3.13, lint, and a Docker build-and-smoke job; Dependabot keeps pins current
 
 ## Quick start
@@ -58,21 +58,21 @@ Both are off by default.
 | `tests/test_boundaries.py`        | On/just-past every bound, NaN/Infinity, lax coercion        |
 | `tests/test_contract.py`          | Responses validated against the OpenAPI schema              |
 | `tests/test_auth_and_rate_limit.py` | 401/503/429, header countdown, sliding window             |
-| `tests/test_unit_utils.py`        | Hypothesis: generated payloads always validate              |
-| `tests/test_generated_cases.py`   | Replays the reviewed LLM-proposed cases                     |
+| `tests/test_unit_utils.py`        | Hypothesis: in-range floats accepted, out-of-range rejected  |
+| `tests/test_generated_cases.py`   | Replays the committed LLM-proposed cases                    |
 | `tests/test_gen_cases_tool.py`    | The generator itself, with a fake client                    |
 
 `tests/conftest.py` resets in-memory state and feature env vars before every test, so tests can run in any order.
 
 ### LLM-assisted cases
 
-`tools/gen_cases.py` sends the `Telemetry` JSON schema to Claude and asks for edge cases with a predicted status and a one-line rationale. It validates the reply's shape and writes `tests/generated/cases.json` marked *Unreviewed*. A person checks each `expected_status`, updates the `review` field, and commits. The test suite replays the file and never calls a model.
+`tools/gen_cases.py` sends the `Telemetry` JSON schema to Claude and asks for edge cases with a predicted status and a one-line rationale. It validates the reply's shape and writes `tests/generated/cases.json` marked *Unreviewed*; the suite refuses an unreviewed file. A person checks each `expected_status`, records who reviewed it in the `review` field, and commits. The suite replays the file and never calls a model.
 
 ```bash
 ANTHROPIC_API_KEY=... make cases
 ```
 
-The committed seed set was written by Claude in the session that added the tool (see the file's `source` field), not by running the script.
+The committed seed set was written by Claude in the session that added the tool, not by running the script. Its `source` and `review` fields say so, and owner review is still pending.
 
 ## Project layout
 

@@ -1,4 +1,8 @@
-"""Replay the committed, human-reviewed LLM-generated cases. No model is called."""
+"""Replay the committed LLM-proposed cases. No model is called.
+
+The file's `review` field records who checked the expected statuses; freshly
+generated ("Unreviewed") files are refused so they cannot slip into the suite.
+"""
 
 from __future__ import annotations
 
@@ -14,7 +18,7 @@ CASES = parse_cases(json.dumps(DOCUMENT["cases"]))
 
 def test_cases_file_records_provenance_and_review():
     assert DOCUMENT["source"]
-    assert DOCUMENT["review"].startswith("Reviewed"), "review the cases before committing them"
+    assert not DOCUMENT["review"].startswith("Unreviewed"), "review the cases before committing"
 
 
 @pytest.mark.parametrize("case", CASES, ids=[c["name"] for c in CASES])

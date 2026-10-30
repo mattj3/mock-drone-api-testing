@@ -24,8 +24,8 @@ This document defines the strategy for testing the Mock Drone API, an async Fast
 | Boundary        | `tests/test_boundaries.py`            | On and just past every numeric bound; NaN/Infinity; lax coercion  |
 | Contract        | `tests/test_contract.py`              | Operations and status codes in the spec; responses match schemas  |
 | Security / NFR  | `tests/test_auth_and_rate_limit.py`   | 401, 503 misconfiguration, 429 + `Retry-After`, sliding window    |
-| Property        | `tests/test_unit_utils.py`            | 200 Hypothesis examples: builders always satisfy the model        |
-| LLM-assisted    | `tests/test_generated_cases.py`       | Replays reviewed, committed model-proposed edge cases             |
+| Property        | `tests/test_unit_utils.py`            | Hypothesis: any in-range float accepted, any other value rejected |
+| LLM-assisted    | `tests/test_generated_cases.py`       | Replays committed model-proposed edge cases; refuses unreviewed files |
 | Tool unit       | `tests/test_gen_cases_tool.py`        | Generator parsing and I/O with a fake client                      |
 
 ## 4. Tools and frameworks
@@ -48,7 +48,7 @@ This document defines the strategy for testing the Mock Drone API, an async Fast
 - **Valid payloads** – seeded random builder (`generate_valid_payload(rng)`), reproducible by seed
 - **Invalid payloads** – `utils.INVALID_PAYLOADS`, each paired with the exact fields the API must reject
 - **Boundary values** – tables in `test_boundaries.py`
-- **Generated cases** – `tests/generated/cases.json`, with provenance and review status recorded in the file
+- **Generated cases** – `tests/generated/cases.json`, with provenance and review status recorded in the file (owner review pending for the seed set)
 - **Isolation** – `conftest.py` clears flights, rate-limit history and feature env vars before each test
 
 ## 7. Test cases (summary)
