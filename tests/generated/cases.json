@@ -1,0 +1,25 @@
+{
+  "source": "Seed set written by Claude Opus 5.5 in the Claude Code session that added tools/gen_cases.py, using the same prompt; not produced by running the script. Regenerate with `python -m tools.gen_cases`.",
+  "generated_at": "2026-10-30T15:30:00+00:00",
+  "review": "Reviewed by Claude Opus 5.5 on 2026-10-30: every expected_status checked against the Telemetry model and confirmed by the test run. Owner sign-off: pending in the PR.",
+  "cases": [
+    {"name": "south_pole_exact", "payload": {"lat": -90, "lon": 0, "alt": 10, "speed": 1, "heading": 0}, "expected_status": 201, "rationale": "Inclusive lower latitude bound."},
+    {"name": "antimeridian_east", "payload": {"lat": 0, "lon": 180, "alt": 10, "speed": 1, "heading": 0}, "expected_status": 201, "rationale": "Inclusive upper longitude bound."},
+    {"name": "heading_just_below_360", "payload": {"lat": 0, "lon": 0, "alt": 10, "speed": 1, "heading": 359.9999}, "expected_status": 201, "rationale": "Largest heading below the exclusive 360 bound."},
+    {"name": "heading_exactly_360", "payload": {"lat": 0, "lon": 0, "alt": 10, "speed": 1, "heading": 360}, "expected_status": 422, "rationale": "360 duplicates 0 and is excluded."},
+    {"name": "negative_zero_altitude", "payload": {"lat": 0, "lon": 0, "alt": -0.0, "speed": 0, "heading": 0}, "expected_status": 201, "rationale": "-0.0 compares equal to 0 so satisfies ge=0."},
+    {"name": "huge_altitude", "payload": {"lat": 0, "lon": 0, "alt": 1e308, "speed": 0, "heading": 0}, "expected_status": 201, "rationale": "No upper altitude bound; finite extreme value."},
+    {"name": "numeric_string_speed", "payload": {"lat": 0, "lon": 0, "alt": 10, "speed": "12", "heading": 0}, "expected_status": 201, "rationale": "Lax mode coerces numeric strings to float."},
+    {"name": "degree_symbol_latitude", "payload": {"lat": "45°", "lon": 0, "alt": 10, "speed": 1, "heading": 0}, "expected_status": 422, "rationale": "Non-numeric string cannot be coerced."},
+    {"name": "infinity_string_altitude", "payload": {"lat": 0, "lon": 0, "alt": "Infinity", "speed": 1, "heading": 0}, "expected_status": 422, "rationale": "Non-finite floats are disallowed."},
+    {"name": "nan_string_speed", "payload": {"lat": 0, "lon": 0, "alt": 10, "speed": "NaN", "heading": 0}, "expected_status": 422, "rationale": "NaN is disallowed."},
+    {"name": "unknown_extra_field", "payload": {"lat": 0, "lon": 0, "alt": 10, "speed": 1, "heading": 0, "battery": 80}, "expected_status": 201, "rationale": "Unknown fields are ignored by default."},
+    {"name": "null_heading", "payload": {"lat": 0, "lon": 0, "alt": 10, "speed": 1, "heading": null}, "expected_status": 422, "rationale": "Required float cannot be null."},
+    {"name": "empty_object", "payload": {}, "expected_status": 422, "rationale": "All five fields are required."},
+    {"name": "array_body", "payload": [{"lat": 0, "lon": 0, "alt": 10, "speed": 1, "heading": 0}], "expected_status": 422, "rationale": "Body must be an object, not a list."},
+    {"name": "nested_under_key", "payload": {"telemetry": {"lat": 0, "lon": 0, "alt": 10, "speed": 1, "heading": 0}}, "expected_status": 422, "rationale": "Fields must be top-level."},
+    {"name": "bare_number_body", "payload": 42, "expected_status": 422, "rationale": "Scalar body is not an object."},
+    {"name": "latitude_overflow_tiny", "payload": {"lat": 90.0000001, "lon": 0, "alt": 10, "speed": 1, "heading": 0}, "expected_status": 422, "rationale": "Just past the inclusive upper bound."},
+    {"name": "speed_negative_tiny", "payload": {"lat": 0, "lon": 0, "alt": 10, "speed": -1e-9, "heading": 0}, "expected_status": 422, "rationale": "Speed must be non-negative."}
+  ]
+}
