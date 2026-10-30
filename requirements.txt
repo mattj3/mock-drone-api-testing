@@ -1,6 +1,4 @@
-fastapi
-uvicorn
-pytest
-httpx
-pytest-asyncio
-pytest-cov
+# Runtime dependencies (pinned). Update via Dependabot.
+fastapi==0.162.0
+pydantic==2.14.2
+uvicorn==0.54.0

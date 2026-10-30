@@ -1,41 +1,64 @@
+"""Error paths: invalid bodies, unknown flights, wrong methods."""
+
+from __future__ import annotations
+
 import pytest
-from httpx import AsyncClient, ASGITransport
-from app.app import app
-from utils import generate_invalid_payloads, generate_valid_payload
 
-transport = ASGITransport(app=app)
+from utils import INVALID_PAYLOADS, generate_valid_payload
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("payload", generate_invalid_payloads())
-async def test_post_telemetry_invalid_payload(payload):
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        response = await ac.post("/telemetry", json=payload)
-        assert response.status_code == 422
+CASES = [pytest.param(payload, fields, id=name) for name, payload, fields in INVALID_PAYLOADS]
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("payload", generate_invalid_payloads())
-async def test_append_telemetry_invalid_payload(payload):
-    # First, create a valid flight to get a flight_id
-    valid = generate_valid_payload()
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        create_response = await ac.post("/telemetry", json=valid)
-        flight_id = create_response.json()["flight_id"]
 
-        # Now test invalid payload
-        response = await ac.post(f"/telemetry/{flight_id}", json=payload)
-        assert response.status_code == 422
+def _rejected_fields(response) -> set[str]:
+    return {err["loc"][-1] for err in response.json()["detail"]}
 
-@pytest.mark.asyncio
-async def test_get_flight_data_invalid_id():
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        response = await ac.get("/flight/nonexistent-id")
-        assert response.status_code == 404
-        assert response.json()["detail"] == "Flight ID not found"
 
-@pytest.mark.asyncio
-async def test_append_telemetry_invalid_id():
-    valid = generate_valid_payload()
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        response = await ac.post("/telemetry/nonexistent-id", json=valid)
-        assert response.status_code == 404
-        assert response.json()["detail"] == "Flight ID not found"
+@pytest.mark.parametrize(("payload", "fields"), CASES)
+async def test_create_rejects_invalid_payload(client, payload, fields):
+    response = await client.post("/telemetry", json=payload)
+
+    assert response.status_code == 422
+    assert _rejected_fields(response) == fields
+
+
+@pytest.mark.parametrize(("payload", "fields"), CASES)
+async def test_append_rejects_invalid_payload_and_keeps_flight_unchanged(
+    client, flight_id, payload, fields
+):
+    response = await client.post(f"/telemetry/{flight_id}", json=payload)
+
+    assert response.status_code == 422
+    assert _rejected_fields(response) == fields
+    assert len((await client.get(f"/flight/{flight_id}")).json()["data"]) == 1
+
+
+async def test_get_unknown_flight_returns_404(client):
+    response = await client.get("/flight/nonexistent-id")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Flight ID not found"}
+
+
+async def test_append_to_unknown_flight_returns_404(client):
+    response = await client.post("/telemetry/nonexistent-id", json=generate_valid_payload())
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Flight ID not found"}
+
+
+async def test_non_json_body_is_rejected(client):
+    response = await client.post(
+        "/telemetry", content="lat=1", headers={"Content-Type": "text/plain"}
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [("GET", "/telemetry"), ("PUT", "/telemetry"), ("POST", "/reset"), ("DELETE", "/flight/x")],
+)
+async def test_wrong_method_returns_405(client, method, path):
+    response = await client.request(method, path)
+
+    assert response.status_code == 405
