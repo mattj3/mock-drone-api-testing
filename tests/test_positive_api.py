@@ -1,54 +1,62 @@
-import pytest
-from httpx import AsyncClient, ASGITransport
-from app.app import app
+"""Happy-path flows: create, read, append, reset."""
+
+from __future__ import annotations
+
 from utils import generate_valid_payload
 
-transport = ASGITransport(app=app)
 
-@pytest.mark.asyncio
-async def test_post_telemetry():
+async def test_post_telemetry_creates_flight(client):
+    response = await client.post("/telemetry", json=generate_valid_payload())
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["status"] == "ok"
+    assert len(body["flight_id"]) == 36  # UUID4 string
+
+
+async def test_get_flight_returns_stored_payload(client):
     payload = generate_valid_payload()
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        response = await ac.post("/telemetry", json=payload)
+    flight_id = (await client.post("/telemetry", json=payload)).json()["flight_id"]
+
+    response = await client.get(f"/flight/{flight_id}")
+
+    assert response.status_code == 200
+    assert response.json() == {"flight_id": flight_id, "data": [payload]}
+
+
+async def test_append_preserves_order(client, flight_id):
+    first = (await client.get(f"/flight/{flight_id}")).json()["data"][0]
+    second, third = generate_valid_payload(), generate_valid_payload()
+
+    for payload in (second, third):
+        response = await client.post(f"/telemetry/{flight_id}", json=payload)
         assert response.status_code == 201
-        data = response.json()
-        assert "flight_id" in data
-        assert data["status"] == "ok"
+        assert response.json() == {"flight_id": flight_id, "status": "appended"}
 
-@pytest.mark.asyncio
-async def test_get_flight_data():
-    payload = generate_valid_payload()
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        post_response = await ac.post("/telemetry", json=payload)
-        flight_id = post_response.json()["flight_id"]
+    data = (await client.get(f"/flight/{flight_id}")).json()["data"]
+    assert data == [first, second, third]
 
-        get_response = await ac.get(f"/flight/{flight_id}")
-        assert get_response.status_code == 200
-        flight_data = get_response.json()
-        assert flight_data["flight_id"] == flight_id
-        assert len(flight_data["data"]) == 1
 
-@pytest.mark.asyncio
-async def test_append_telemetry():
-    initial_payload = generate_valid_payload()
-    append_payload = generate_valid_payload()
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        post_response = await ac.post("/telemetry", json=initial_payload)
-        flight_id = post_response.json()["flight_id"]
+async def test_flights_are_independent(client):
+    a, b = generate_valid_payload(), generate_valid_payload()
+    id_a = (await client.post("/telemetry", json=a)).json()["flight_id"]
+    id_b = (await client.post("/telemetry", json=b)).json()["flight_id"]
+    await client.post(f"/telemetry/{id_a}", json=generate_valid_payload())
 
-        append_response = await ac.post(f"/telemetry/{flight_id}", json=append_payload)
-        assert append_response.status_code == 201
-        assert append_response.json()["status"] == "appended"
+    assert id_a != id_b
+    assert len((await client.get(f"/flight/{id_a}")).json()["data"]) == 2
+    assert (await client.get(f"/flight/{id_b}")).json()["data"] == [b]
 
-        get_response = await ac.get(f"/flight/{flight_id}")
-        assert len(get_response.json()["data"]) == 2
 
-@pytest.mark.asyncio
-async def test_delete_reset():
-    payload = generate_valid_payload()
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        await ac.post("/telemetry", json=payload)
+async def test_reset_clears_all_flights(client, flight_id):
+    response = await client.delete("/reset")
 
-        reset_response = await ac.delete("/reset")
-        assert reset_response.status_code == 200
-        assert reset_response.json()["status"] == "reset"
+    assert response.status_code == 200
+    assert response.json() == {"status": "reset"}
+    assert (await client.get(f"/flight/{flight_id}")).status_code == 404
+
+
+async def test_reset_is_idempotent(client):
+    for _ in range(2):
+        response = await client.delete("/reset")
+        assert response.status_code == 200
